@@ -5,7 +5,7 @@
 <meta name="description" content="兩位小作家的手寫練習、教師評量與文字冒險。">
 <link rel="manifest" href="./manifest.webmanifest"><link rel="apple-touch-icon" href="./assets/icon-192.png">
 <link rel="icon" type="image/png" href="./assets/icon-192.png">
-<title>小作家冒險島 v2.2.1</title><link rel="stylesheet" href="./styles.css">
+<title>小作家冒險島 v2.3</title><link rel="stylesheet" href="./styles.css">
 </head><body>
 <div class="container">
 <header class="top"><div class="brand"><div class="brand-icon">✦</div><div><strong>小作家冒險島</strong><small>手寫練習 · 文字魔法 · 必勝冒險</small></div></div><nav class="nav" id="nav"></nav></header>
@@ -13,9 +13,9 @@
   <span id="cloud-state">本機試玩模式｜資料尚未跨裝置同步</span>
   <button type="button" data-action="cloud-setup" class="cloud-link">設定家庭資料連線</button>
 </section>
-<main id="app"></main><footer class="footer">家庭自用 v2.2.1 · 需連線且由教師核准後，XP 才是跨裝置正式紀錄。照片不會自動送入 AI。</footer>
+<main id="app"></main><footer class="footer">家庭自用 v2.3 · 需連線且由教師核准後，XP 才是跨裝置正式紀錄。照片不會自動送入 AI。</footer>
 </div>
-<div id="toast" class="hide" role="status"></div><div id="modalroot"></div>
+<div id="toast" class="hide" role="status"></div><div id="modalroot"></div><div id="submission-screen" class="submission-screen" hidden aria-live="polite"></div>
 <script src="./seed.js"></script><script src="./cloud.js"></script><script src="./app.js"></script>
 <script>
 if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(err=>console.warn('PWA 暫不能離線：',err)));}

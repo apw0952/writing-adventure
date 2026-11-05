@@ -15,3 +15,24 @@
 .cloud-help{font-size:12px;color:#6a7897;line-height:1.6}
 .cloud-status{font-size:13px;padding:12px;border-radius:12px;background:#e5eefc;margin:12px 0}
 @media(max-width:620px){.cloud-strip{font-size:12px;padding:10px}.cloud-link{width:100%;text-align:center}.modal{max-height:90dvh;overflow:auto}.btn{min-height:44px}}
+
+/* v2.3: iPhone/平板兒童送件防誤觸全畫面；無虛構進度百分比 */
+.submission-screen[hidden]{display:none!important}
+.submission-screen{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;padding:max(22px,env(safe-area-inset-top)) 18px max(22px,env(safe-area-inset-bottom));background:linear-gradient(145deg,#eaf2ff,#f4edff);overflow:auto;overscroll-behavior:contain}
+.submission-locked{overflow:hidden}
+.submission-panel{background:white;border:2px solid #d6def8;box-shadow:0 22px 65px #3b4b8128;border-radius:29px;width:min(100%,620px);padding:clamp(26px,6vw,48px) clamp(18px,5vw,40px);text-align:center;display:flex;flex-direction:column;align-items:center;gap:19px}
+.submission-emblem{font-size:clamp(78px,17vw,112px);line-height:1.15}
+.submission-done{animation:submission-celebrate .5s ease-out both}
+.submission-panel h1{font-size:clamp(29px,7.6vw,42px);font-weight:900;letter-spacing:.025em;line-height:1.28;color:#213655;margin:0}
+.submission-panel p{font-size:clamp(19px,5vw,24px);font-weight:700;color:#52688e;line-height:1.65;margin:0}
+.submission-panel .submission-detail{font-weight:500;color:#82565e;font-size:15px;overflow-wrap:anywhere}
+.submission-track{height:16px;border-radius:30px;width:100%;overflow:hidden;background:#e1e6f6;position:relative}
+.submission-track span{display:block;position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,#4c69dd,#53bdb0);width:38%;border-radius:30px;animation:submission-indeterminate 1.7s ease-in-out infinite}
+.submission-hint{font-weight:800;background:#fff3d9;border-radius:16px;padding:17px;color:#745327;font-size:clamp(17px,4.6vw,21px);line-height:1.6}
+.submission-controls{display:flex;flex-direction:column;gap:14px;width:100%;margin-top:7px}
+.submission-controls .btn{width:100%;min-height:68px;display:flex;align-items:center;justify-content:center;text-align:center;font-size:clamp(20px,5vw,25px);font-weight:900;border-radius:18px;padding:14px}
+.submission-controls .submission-main{background:#5067d9;color:#fff}
+.submission-controls .submission-secondary{background:#eef2ff;color:#405bab}
+@keyframes submission-indeterminate{0%{transform:translateX(-110%)}50%{transform:translateX(125%)}100%{transform:translateX(320%)}}
+@keyframes submission-celebrate{0%{transform:scale(.75);opacity:.3}100%{transform:scale(1);opacity:1}}
+@media(prefers-reduced-motion:reduce){.submission-track span{animation-duration:3.5s}.submission-done{animation:none}}

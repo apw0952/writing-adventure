@@ -1,4 +1,4 @@
-/* 小作家冒險島 v2.2：沿用 v2.1 教材與遊戲，新增 PWA 及可選 GAS 雲端資料模式。 */
+/* 小作家冒險島 v2.3：兒童大畫面提交狀態；沿用既有 PWA、GAS 與 XP 規則。 */
 (()=>{'use strict';
 const SEED=window.WRITER_SEED, KEY='little_writers_island_v22';
 const BASE={sentence:20,combo:20,short:20,essay:100};
@@ -28,6 +28,7 @@ const INITIAL=()=>({version:21,pin:'',config:{endpoint:'',token:'',auto:false,so
 let S;try{const saved=localStorage.getItem(KEY);const old=saved?null:localStorage.getItem('little_writers_island_v2');S={...INITIAL(),...JSON.parse(saved||old||'{}')};if(old&&!saved){S.legacyArchive={fights:S.fights,awards:S.awards};S.fights={g3:[],g4:[]};S.awards={g3:[],g4:[]};for(const student of ['g3','g4'])for(const w of Object.values(S.works?.[student]||{})){if(w.done){w.reviewStatus='pending';w.awardedXP=0;w.legacyImported=true}}S.version=21;S.migratedFromV2=true;}}catch{S=INITIAL()}
 for(const k of ['g3','g4']){S.works[k]??={};S.fights[k]??=[];S.awards[k]??=[]}
 S.generated={...INITIAL().generated,...(S.generated||{})};S.config={...INITIAL().config,...(S.config||{}),endpoint:'',token:'',auto:false};S.notes??={};S.samples??={};for(const student of ['g3','g4'])for(const w of Object.values(S.works[student])){if(w.done&&!w.reviewStatus){w.reviewStatus='pending';w.awardedXP=0}w.awardedXP=Number(w.awardedXP)||0;}
+let submissionBusy=false, submissionView=null;
 let UI={sandboxReport:null,sandboxBusy:false,demos:[],role:'student',student:'g3',teacherStudent:'g4',page:'home',tab:'overview',essayIndex:0,adult:false,unlocked:new Set(),modal:null,battleStep:0,mask:null};
 const $=s=>document.querySelector(s),$all=s=>[...document.querySelectorAll(s)];
 const h=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -48,8 +49,43 @@ function applyCloudState(remote){if(!remote?.works||!remote?.fights||!remote?.aw
 }persist();}
 async function refreshCloud(){if(!cloudMode())return;const data=await LWCloud.call('state');applyCloudState(data.state);updateCloudBanner();render();}
 function gradePayload(student,key,w,mode){return {id:student+':'+key,mode,stars:w.stars||0,score:w.score??'',childFeedback:w.childFeedback||'',teacherFeedback:w.teacherFeedback||'',revised:!!w.revised}}
-async function cloudSubmit(student,kind,index,w){for(const id of w.photos||[]){const data=await photoGet(id);if(!data)throw Error('找不到要上傳的照片');await LWCloud.call('uploadPhoto',{student,id,data});}
-  const result=await LWCloud.call('submit',{student,kind,index,checks:w.checks,photoIds:w.photos});applyCloudState(result.state);return result;}
+async function cloudSubmit(student,kind,index,w){
+  // 同一作業可能在網路逾時後已成功寫入。先向伺服器核實，避免再次送出。
+  const remote=await LWCloud.call('state');
+  const prior=remote.state?.works?.[student]?.[workKey(kind,index)];
+  if(prior&&['pending','approved'].includes(prior.reviewStatus)){applyCloudState(remote.state);return {alreadyReceived:true};}
+  const photos=w.photos||[];
+  for(let i=0;i<photos.length;i++){
+    showSubmissionStep('正在傳送照片……',`正在安全傳送第 ${i+1} 張，共 ${photos.length} 張；請保持畫面開啟。`);
+    const id=photos[i],data=await photoGet(id);
+    if(!data)throw Error('找不到要上傳的照片，請重新選取。');
+    await LWCloud.call('uploadPhoto',{student,id,data});
+  }
+  showSubmissionStep('正在交給老師……','照片已傳送，正在確認作業紀錄。');
+  const result=await LWCloud.call('submit',{student,kind,index,checks:w.checks,photoIds:photos});
+  applyCloudState(result.state);return result;
+}
+function submissionRoot(){return document.getElementById('submission-screen')}
+function showSubmissionStep(title,description){
+  const root=submissionRoot();if(!root||!submissionView)return;
+  submissionView.phase='working';
+  root.hidden=false;root.innerHTML=`<section class="submission-panel" role="dialog" aria-modal="true" aria-labelledby="submission-title" aria-describedby="submission-description"><div class="submission-emblem" aria-hidden="true">📨</div><h1 id="submission-title">${h(title)}</h1><p id="submission-description">${h(description)}</p><div class="submission-track" role="progressbar" aria-label="上傳中，無法取得精確百分比"><span></span></div><div class="submission-hint">⏳ 正在安全保存，請不要關閉 App 或重複按送出。</div></section>`;
+  document.body.classList.add('submission-locked');
+}
+function finishSubmissionScreen(success,message=''){
+  const root=submissionRoot();if(!root||!submissionView)return;
+  submissionView.phase=success?'success':'error';
+  const title=success?'老師收到作業了！':'還不能確認是否送出';
+  root.hidden=false;root.innerHTML=`<section class="submission-panel" role="dialog" aria-modal="true" aria-labelledby="submission-title" aria-describedby="submission-description"><div class="submission-emblem ${success?'submission-done':'submission-error'}" aria-hidden="true">${success?'✅':'⚠️'}</div><h1 id="submission-title">${title}</h1><p id="submission-description">${success?'作品已送交老師，XP 要等老師確認才會入帳。':'照片和勾選仍保留在這台裝置。網路可能已收到作品，重試前會先向雲端核對。'}</p>${message?`<p class="submission-detail">${h(message)}</p>`:''}<div class="submission-controls">${success?`${btn('繼續挑戰下一組 →','submission-next','submission-main')}${btn('返回練習首頁','submission-home','submission-secondary')}`:`${btn('重新確認並送出','submission-retry','submission-main')}${btn('保留草稿，返回作業','submission-close','submission-secondary')}`}</div></section>`;
+  document.body.classList.add('submission-locked');
+}
+function closeSubmissionScreen(){if(submissionBusy)return;const root=submissionRoot();if(root){root.hidden=true;root.innerHTML='';}submissionView=null;document.body.classList.remove('submission-locked')}
+async function verifySubmissionAtServer(student,kind,index){
+  const response=await LWCloud.call('state');
+  const w=response.state?.works?.[student]?.[workKey(kind,index)];
+  if(w&&['pending','approved'].includes(w.reviewStatus)){applyCloudState(response.state);return true}
+  return false;
+}
 function cloudSettingsModal(){openModal({type:'cloud',title:'☁️ 家庭雲端連線（GitHub Pages＋Apps Script）'})}
 async function connectCloud(){const endpoint=$('#cloud-url')?.value.trim()||'',token=$('#cloud-secret')?.value.trim()||'';if(!endpoint||!token)throw Error('請填入 Apps Script /exec 網址及家庭通行碼');
   toast('正在測試家庭雲端連線……');const i=await LWCloud.connect(endpoint,token);
@@ -125,7 +161,7 @@ else if(kind==='sentence'){body=`<span class="pill green">${h(q.relation)}</span
 else if(kind==='combo'){body=`<span class="pill peach">情境：${h(q.topic)}</span><h2>把兩種句型放在同一件事情裡</h2><div class="grid2"><div class="callout">① ${h(q.first)}</div><div class="callout">② ${h(q.second)}</div></div><div class="guide">${h(q.hint||'寫出一件完整的事情，讓兩組關聯詞自然地連在一起。')}</div>${[0,1].map(i=>`<label class="check"><input type="checkbox" data-check="${i}" ${w.checks[i]?'checked':''} ${w.done?'disabled':''}><span>第 ${i+1} 題：我已經寫好一個複合句</span></label>`).join('')}${UI.unlocked.has(student+':'+key)?`<div class="answer"><b>參考說明</b><p>${h(q.sample||'把兩個句型串成同一個情境即可；不必硬塞所有關聯詞，句意自然、前後合理更重要。')}</p></div>`:''}`}
 else {const target=Number(S.config.essayWords)||350,parts=[.17,.26,.4,.17].map(x=>Math.round(target*x/10)*10);parts[3]=target-parts[0]-parts[1]-parts[2];body=`<h2>${h(q.title)}</h2><p class="muted">${h(q.goal)}</p><div class="guide">寫前提示：${h(q.tip)}</div><div class="callout gold"><b>本篇建議約 ${target} 字</b>，只是練習規劃，並不是硬性分數規則。最精彩的轉折可以多寫一點。</div>${(q.segments||[]).map((seg,i)=>`<div class="segment"><div class="segmark">${['起','承','轉','合'][i]}<div class="xs">${parts[i]} 字</div></div><div><b>第 ${i+1} 段：${h(seg)}</b><p class="muted sm">${['開頭交代誰、在哪裡、什麼事情。','補充一個具體畫面、動作或聲音。','聚焦最重要的事件、困難、驚喜或轉折。','寫下結果，以及最真實的想法和感受。'][i]}</p><label class="check"><input type="checkbox" data-check="${i}" ${w.checks[i]?'checked':''} ${w.done?'disabled':''}>我已完成這一段</label></div></div>`).join('')}${UI.unlocked.has(student+':'+key)?`<div class="answer"><h3>📖 寫完後的閱讀範文</h3>${renderSample(index,q)}</div>`:''}`}
 return `${header(`${KINDS[kind]} · 第 ${index+1} 組`,kind==='essay'?'先看分段引導，自己寫完再讀範文。':'不限一天一組，寫完可以繼續挑戰。',true)}<div class="card" style="margin-bottom:14px"><div class="actions">${btn('← 返回練習首頁','home','ghost')}${index>0?btn('上一組','jump-task','outline',`data-kind="${kind}" data-index="${index-1}"`):''}${index+1<bank(kind).length?btn('下一組 →','jump-task','outline',`data-kind="${kind}" data-index="${index+1}"`):''}</div><p class="muted sm" style="margin:8px 0 0">可自由切換組別；已退回的作業仍保留原照片與補寫入口，尚未核准不會發 XP。</p></div><div class="split"><div class="stack"><div class="card"><div class="statusline"><span class="pill ${w.reviewStatus==='approved'?'green':w.reviewStatus==='needs_fix'?'red':'gray'}">${reviewLabel(w)}</span><b>${checked} / ${max} 項</b></div>${progress(checked,max)}</div><div class="card">${body}</div><div class="card"><div class="statusline"><h2>📸 一次拍照保存作品</h2><span class="pill gray">可多張</span></div><p class="muted sm">手寫完成後一次拍照（可多張）。需有照片才能送出，提交後由教師確認完成才發 XP。</p>${uploadHTML(student,key,w)}<div class="actions">${w.done?`<span class="pill ${w.reviewStatus==='approved'?'green':'peach'}">${w.reviewStatus==='approved'?`已核准 +${w.awardedXP||0} XP`:'⏳ 已送交教師，尚未領 XP'}</span>${btn('再挑戰下一組','next-task','',`data-kind="${kind}"`)}`:btn(w.reviewStatus==='needs_fix'?'↩️ 補交作業':'📮 送交教師確認','finish-task','',`${checked!==max||!w.photos.length?'disabled':''}`)}${btn(UI.unlocked.has(student+':'+key)?'參考答案已解鎖':'🔒 家長解鎖參考寫法','unlock-answer','outline',`data-key="${h(key)}" ${!w.done?'disabled':''}`)}</div>${w.done?`<div class="callout ${w.reviewStatus==='approved'?'green':'gold'}" style="margin-top:16px">${reviewLabel(w)}｜${w.reviewStatus==='approved'?(w.stars?starsHTML(w.stars):'已完成本次練習'):'不需等老師確認，可以繼續挑戰'}${w.childFeedback?`<p>${h(w.childFeedback)}</p>`:''}</div>`:''}${w.reviewStatus==='needs_fix'?`<div class="callout red">↩️ 請補充：${h(w.childFeedback||w.teacherFeedback||'請依教師提醒補上內容。')}</div>`:''}</div></div><aside class="stack"><div class="card"><h3>🗺️ 今天的小目標</h3><p class="muted sm">${kind==='sentence'?'句子要完整，三句盡量換不同情境。':kind==='combo'?'兩組關聯詞必須自然連接，不是比誰塞得多。':kind==='short'?'精簡不是越短越好；重要資訊要留下。':'不用追求字數剛剛好，先把真正值得寫的細節說清楚。'}</p></div><div class="card"><h3>✨ 冒險能量</h3><div class="stat">${fmt(availableXP(student))} XP</div><div class="muted sm">確認完成：${BASE[kind]} XP；四、五星再略為加成。</div>${btn('查看怪物','to-adventure','ghost')}</div>${w.done?`<div class="card"><h3>📑 回顧與加強</h3><p class="muted sm">老師可以從作品頁給星星、指出錯字，並確認訂正加 20 XP。</p></div>`:''}</aside></div>`}
-function uploadHTML(student,key,w){return `<div class="upload"><label class="btn ghost">📷 拍照或選擇照片<input type="file" accept="image/*" capture="environment" multiple data-upload="${h(student)}|${h(key)}"></label><span class="muted sm">${w.photos.length?'已儲存 '+w.photos.length+' 張':'尚未上傳'}</span></div>${w.photos.length?`<div class="photos">${w.photos.map(id=>`<img class="photo" data-photo="${h(id)}" data-action="view-photo" data-id="${h(id)}" alt="手寫照片預覽">`).join('')}</div>`:''}<p class="footnote">注意：本機保存不等於已備份；如要長期使用，請定期由家長端下載完整備份。</p>`}
+function uploadHTML(student,key,w){const label=w.photos.length?(w.done&&['pending','approved','needs_fix'].includes(w.reviewStatus)?`✅ 已提交雲端 ${w.photos.length} 張照片`:`已選取 ${w.photos.length} 張，尚未送交老師`):'尚未選取照片';return `<div class="upload"><label class="btn ghost">📷 拍照或選擇照片<input type="file" accept="image/*" capture="environment" multiple data-upload="${h(student)}|${h(key)}"></label><span class="muted sm">${label}</span></div>${w.photos.length?`<div class="photos">${w.photos.map(id=>`<img class="photo" data-photo="${h(id)}" data-action="view-photo" data-id="${h(id)}" alt="手寫照片預覽">`).join('')}</div>`:''}<p class="footnote">${w.done?'已送交的照片由家庭雲端保管；本機仍建議定期備份。':'送交老師前僅保存於目前裝置，照片預覽不代表已上傳雲端。'}</p>`}
 function renderSample(index,q){let sample=S.samples[String(index)]||'';if(!sample&&q.title?.includes('旅行'))sample='出發前的晚上，我一直想著明天的旅行，興奮得睡不著。\n一早出門，車窗外的街道漸漸變成青綠色的山坡。我看見海面上有一艘白色的船，心裡充滿期待。\n真正讓我難忘的是坐船的時候。船突然左右搖晃，我緊緊抓著欄杆，海風把頭髮吹得亂七八糟。原本有點害怕的我，看見浪花在陽光下閃閃發亮，又忍不住笑了。\n這趟旅行讓我發現，最珍貴的回憶不一定是著名景點，也可能是那些出乎意料的小事情。';return sample?`<p style="white-space:pre-line">${h(sample)}</p><p class="muted sm">這是示範而不是唯一標準。請注意每段如何選擇重點。</p>`:'<p>目前還沒有這題的完整範文。老師可在教師端透過 AI 生成並保存；尚未設定 AI 時，原本的分段引導仍可使用。</p>'}
 function renderAdventure(){const student=UI.student,finished=S.fights[student].length,available=availableXP(student),i=finished,need=i<24?cost(student,i):0,pts=S.fights[student].reduce((a,x)=>a+x.points,0);
 return `${header('⚔️ 文字魔法冒險','努力累積 XP、打倒怪物、打開寶箱。這是一場必勝的慶祝！',true)}<div class="grid3"><div class="card"><div class="stat">${fmt(earnedXP(student))}</div><div class="stat-label">歷來已核准 XP</div></div><div class="card"><div class="stat">${fmt(available)}</div><div class="stat-label">目前可用 XP</div></div><div class="card"><div class="stat">${finished} / 24</div><div class="stat-label">已擊敗主線怪物</div></div></div><div class="card" style="margin-top:18px"><div class="statusline"><div><span class="pill peach">${i<24?'下一場戰鬥':'本篇章全破'}</span><h2>${i<24?ENEMIES[i]:'🏆 文字王國守護者'}</h2></div><div class="badge-emoji">${i<24?ENEMY_ICONS[i]:'👑'}</div></div>${i<24?`<p class="muted sm">挑戰所需 ${cost(student,i)} XP｜勝利獲得 ${fightReward(i)} 家庭點數${(i+1)%3===0?'｜BOSS 戰':''}</p>${progress(available,need)}<p class="muted sm">${available>=need?'XP 足夠，隨時可以開始！':'還差 '+(need-available)+' XP。練習後再來，怪物會等你。'}</p><div class="actions">${btn('⚔️ 挑戰 '+ENEMIES[i]+'（必勝）','start-fight','',available<need?'disabled':'')}</div>`:'<div class="callout green">恭喜！24 隻怪物都已打倒，累積故事會一直保存。</div>'}</div><div class="card" style="margin-top:18px"><div class="statusline"><h2>🗺️ 24 隻怪物的冒險地圖</h2><span class="pill gray">三、四年級各自有 XP 難度</span></div><div class="mapcards">${ENEMIES.map((name,j)=>`<div class="mapcard ${(j+1)%3===0?'boss':''} ${j>i?'locked':''} ${j===i?'current':''}"><div class="statusline"><span class="pill gray">第 ${j+1} 隻</span>${(j+1)%3===0?'<span class="pill peach">👑 BOSS</span>':''}</div><div class="enemy">${j<i?'🏆':ENEMY_ICONS[j]}</div><b>${h(name)}</b><div class="xs muted">${AREAS[Math.floor(j/2)]}</div><div class="xs muted">${cost(student,j)} XP</div><div class="reward">${j<i?'已勝利｜':'獎勵｜'}${fightReward(j)} 點</div></div>`).join('')}</div></div><div class="callout gold" style="margin-top:18px">家庭點數獎勵會先列入「待家長確認」。主線 24 隻全部通關可獲得 ${fmt(ENEMIES.reduce((a,_,i)=>a+fightReward(i),0))} 點（另有成就稱號點數）。</div>`}
@@ -182,7 +218,22 @@ function unlockAdult(role){if(cloudMode()&&LWCloud.identity.role!=='adult'){toas
 async function completeTask(){const student=UI.student,kind=UI.kind,index=UI.taskIndex??nextIndex(student,kind),w=work(student,kind,index),needed=kind==='sentence'?3:kind==='combo'?2:4;
 if(w.sending)return toast('正在提交，請勿重複按下。');if(cloudRequired())throw Error('家庭雲端尚未連線。請先連線再提交，草稿與照片仍保留在這台裝置。');if(cloudMode()&&!cloudScope(student))throw Error('請切換回已登入的學生帳號');
 if(w.reviewStatus==='approved'||w.reviewStatus==='pending')return toast('這一組已經送出，不會重複計算。');if(w.checks.filter(Boolean).length!==needed)return toast('請先完成這一組所有手寫項目。',true);if(!w.photos?.length)return toast('請先拍照上傳手寫作業，才能送請教師確認。',true);
-if(cloudMode()){w.sending=true;toast('正在安全上傳手寫作品，請勿關閉畫面……');try{await cloudSubmit(student,kind,index,w);render();toast('📮 雲端提交成功！可以直接挑戰下一組。')}finally{w.sending=false;}return;}
+if(cloudMode()){
+  if(submissionBusy)return;
+  submissionBusy=true;w.sending=true;submissionView={student,kind,index,phase:'working'};
+  showSubmissionStep('正在準備作業……','正在確認雲端紀錄，避免重複提交。');
+  try{
+    await cloudSubmit(student,kind,index,w);
+    render();finishSubmissionScreen(true);
+  }catch(error){
+    // 雲端回覆丟失時，不能直接宣稱上傳失敗或安全重送。盡可能再核對一次。
+    let confirmed=false;
+    try{confirmed=await verifySubmissionAtServer(student,kind,index)}catch(e){console.warn('無法再次確認作業是否已送達',e)}
+    if(confirmed){render();finishSubmissionScreen(true,'已向雲端再次確認：這份作品已送達。')}
+    else finishSubmissionScreen(false,'詳細訊息：'+(error.message||String(error)));
+  }finally{w.sending=false;submissionBusy=false;}
+  return;
+}
 const wasFix=w.reviewStatus==='needs_fix';w.done=true;w.reviewStatus='pending';w.date=day();w.completedAt=time();w.submissionID ||= makeID();w.resubmitted=(w.resubmitted||0)+(wasFix?1:0);persist();render();toast('示範作業已送出（僅在本機）。要跨裝置審核，請設定家庭雲端。')}
 
 function applyGradeInputs(w){const scoreEl=$('#grade-score'),starsEl=$('#grade-stars');if(!scoreEl||!starsEl)throw Error('請先開啟要審核的作業');const str=scoreEl.value.trim(),score=str===''?null:Number(str);if(score!==null&&(!Number.isFinite(score)||score<0||score>100))throw Error('分數需為 0～100');w.score=score===null?null:Math.round(score);w.stars=Number(starsEl.value)||0;w.childFeedback=$('#grade-child').value.trim();w.teacherFeedback=$('#grade-teacher').value.trim();w.revised=$('#grade-revised').checked;}
@@ -211,7 +262,16 @@ function downloadJSON(name,obj){const blob=new Blob([JSON.stringify(obj)],{type:
 async function exportBackup(){const photos={};for(const student of ['g3','g4'])for(const w of Object.values(S.works[student]))for(const id of w.photos||[]){const src=await photoGet(id),mask=await photoGet('masked:'+id);if(src)photos[id]=src;if(mask)photos['masked:'+id]=mask}const state=JSON.parse(JSON.stringify(S));state.config.token='';state.pin='';downloadJSON(`little_writers_backup_${day()}.json`,{type:'little_writers_v21_backup',createdAt:time(),state,photos});toast('備份已下載（含照片，請妥善保管）')}
 async function importBackup(file){if(!file)return;const text=await file.text();if(text.length>90*1024*1024)throw Error('備份檔超過此版本的匯入上限');const data=JSON.parse(text);if(!['little_writers_v2_backup','little_writers_v21_backup'].includes(data.type)||!data.state?.works||!data.state?.fights||!data.state?.awards)throw Error('不是本版可匯入的備份檔');if(!confirm('匯入會覆蓋目前學習紀錄。請先備份。確定嗎？'))return;const pin=S.pin;for(const [id,val]of Object.entries(data.photos||{})){if(!/^(masked:)?[a-z0-9]{8,30}$/.test(id)||!/^data:image\/(jpeg|png);base64,/.test(val))continue;await photoPut(id,val)}S={...INITIAL(),...data.state};if(data.type==='little_writers_v2_backup'){S.legacyArchive={fights:S.fights,awards:S.awards};S.fights={g3:[],g4:[]};S.awards={g3:[],g4:[]}}S.pin=pin;S.config={...INITIAL().config,...S.config,token:''};for(const k of ['g3','g4']){S.works[k]??={};S.fights[k]??=[];S.awards[k]??=[];for(const w of Object.values(S.works[k])){if(!w.reviewStatus){w.reviewStatus=w.done?'pending':'draft';w.awardedXP=0}}}S.version=21;persist();UI.page='home';UI.role='student';UI.adult=false;render();toast('備份已成功匯入')}
 // ==== click / change 事件 ====
-document.addEventListener('click',async ev=>{const b=ev.target.closest('[data-action]');if(!b)return;const act=b.dataset.action;try{
+document.addEventListener('click',async ev=>{const b=ev.target.closest('[data-action]');if(!b)return;const act=b.dataset.action;
+if(submissionBusy)return;
+if(submissionView){
+  if(!['submission-next','submission-home','submission-retry','submission-close'].includes(act))return;
+  if(act==='submission-next'){const {student,kind}=submissionView;closeSubmissionScreen();UI.student=student;UI.kind=kind;UI.taskIndex=nextIndex(student,kind);UI.page='task';render();return;}
+  if(act==='submission-home'){closeSubmissionScreen();UI.page='home';render();return;}
+  if(act==='submission-close'){closeSubmissionScreen();return;}
+  if(act==='submission-retry'){const {student,kind,index}=submissionView;closeSubmissionScreen();UI.student=student;UI.kind=kind;UI.taskIndex=index;try{await completeTask()}catch(e){toast('重試未開始：'+(e.message||String(e)),true)}return;}
+}
+try{
 if(act==='cloud-setup')cloudSettingsModal();
 else if(act==='cloud-connect')await connectCloud();
 else if(act==='cloud-logout'){LWCloud.forget();closeModal();UI.adult=false;UI.role='student';UI.page='home';render();toast('已登出家庭雲端（本機試玩資料保留）')}

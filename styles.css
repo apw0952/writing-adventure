@@ -57,3 +57,6 @@
 .student-picker-select{display:flex;gap:8px;align-items:center;min-width:230px;max-width:100%;}
 .student-picker-select select{min-width:170px;}
 @media(max-width:560px){.student-manager-head{align-items:stretch}.student-picker-select{width:100%}.student-picker-select select{flex:1}}
+
+/* v3.1：危險操作與一般藍色按鈕明確區隔 */
+.btn.delete-danger{background:#b7444a;color:#fff;border:1px solid #aa3038}.btn.delete-danger:hover:not(:disabled){background:#932c34}.btn.delete-danger.outline{background:#fff7f6;color:#a2323a;border-color:#e5aeb2}.btn.delete-danger.outline:hover:not(:disabled){background:#ffe6e4}

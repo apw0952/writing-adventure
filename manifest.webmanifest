@@ -1,0 +1,17 @@
+{
+  "name": "小作家冒險島 · 文字魔法冒險",
+  "short_name": "小作家冒險島",
+  "description": "兩位小作家的手寫造句、作文與冒險遊戲",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f5f7ff",
+  "theme_color": "#5267d5",
+  "lang": "zh-TW",
+  "icons": [
+    {"src":"./assets/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any maskable"},
+    {"src":"./assets/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
+  ]
+}

@@ -1,5 +1,5 @@
 // PWA 本機題庫與介面離線快取；私人照片與 GAS 回覆絕不由 Service Worker 快取。
-const CACHE='writers-v24-profiles-modules-20261105';
+const CACHE='writers-v300-dynamic-students-20261106';
 const ASSETS=['./','./index.html','./styles.css','./app.js','./cloud.js','./seed.js','./modules.js','./manifest.webmanifest','./assets/icon-192.png','./assets/icon-512.png'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});

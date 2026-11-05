@@ -50,3 +50,10 @@
 .module-option b{font-size:14px}.module-option input{width:22px;height:22px;accent-color:var(--accent);flex:none}.module-option .row{align-items:flex-start}.module-advice{font-size:12px;font-weight:750;color:#427d58}.module-option small{font-size:11px}
 .student-switch{flex-wrap:wrap}.student-switch button{min-width:0;overflow-wrap:anywhere}
 @media(max-width:650px){.avatar-options{grid-template-columns:repeat(2,minmax(0,1fr))}.module-grid{grid-template-columns:1fr}.avatar-option{min-height:116px}.module-option{min-height:99px}}
+
+/* v3.0：動態學生頁籤與五人以上清單 */
+.student-manager-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:12px 0;}
+.student-picker{display:flex;flex-wrap:wrap;gap:4px;max-width:100%;}
+.student-picker-select{display:flex;gap:8px;align-items:center;min-width:230px;max-width:100%;}
+.student-picker-select select{min-width:170px;}
+@media(max-width:560px){.student-manager-head{align-items:stretch}.student-picker-select{width:100%}.student-picker-select select{flex:1}}
